@@ -8,7 +8,7 @@ import (
 )
 
 type Palette struct {
-	face *font.FontFace
+	face *font.FontFace // @TODO: fallback font
 
 	characters         []rune
 	renderedCharacters map[rune]*bitmap.Bitmap
@@ -42,7 +42,7 @@ func (p *Palette) SetFont(face *font.FontFace) error {
 }
 
 func (p *Palette) RenderCharacters() error {
-	// freetype bindings
+	// @TODO: characters rendering
 
 	return fmt.Errorf("under construction")
 }
