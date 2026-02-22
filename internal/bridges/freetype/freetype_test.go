@@ -1,7 +1,6 @@
 package freetype
 
 import (
-	"fmt"
 	"os"
 	"testing"
 
@@ -9,19 +8,25 @@ import (
 )
 
 func TestGetFaceProperties(t *testing.T) {
-	fontPath := testutils.DataPath("fonts/DejaVuSansMono.ttf")
-	fontSize := 16
+	validFontSize := 16
+	invalidFontSize := -1
 
-	data, err := os.ReadFile(fontPath)
+	fontPath := testutils.DataPath("fonts/DejaVuSansMono.ttf")
+	fontData, err := os.ReadFile(fontPath)
 	if err != nil {
 		t.Fatalf("SETUP FAILURE: could not load font file: %v", err)
 	}
 
-	fmt.Println(len(data))
-
-	properties, err := GetFaceProperties(data, fontSize)
+	dummyPath := testutils.DataPath("fonts/dummy.ttf")
+	dummyData, err := os.ReadFile(dummyPath)
 	if err != nil {
-		t.Fatalf("could not get face properties: %s", err)
+		t.Fatalf("SETUP FAILURE: could not load dummy font file: %v", err)
+	}
+
+	// positive test
+	properties, err := GetFaceProperties(fontData, validFontSize)
+	if err != nil {
+		t.Fatalf("could not get face properties: %v", err)
 	}
 
 	if properties.FamilyName != "DejaVu Sans Mono" {
@@ -30,6 +35,7 @@ func TestGetFaceProperties(t *testing.T) {
 	if properties.StyleName != "Book" {
 		t.Errorf("expected StyleName to be \"Book\", got: %s", properties.StyleName)
 	}
+
 	if !properties.Monospace {
 		t.Errorf("expected Monospace to be true, got: %t", properties.Monospace)
 	}
@@ -39,5 +45,17 @@ func TestGetFaceProperties(t *testing.T) {
 	}
 	if properties.MaxCharacterHeight <= 0 {
 		t.Errorf("expected MaxCharacterHeight to be bigger than 0, got: %d", properties.MaxCharacterHeight)
+	}
+
+	// dummy test
+	properties, err = GetFaceProperties(dummyData, validFontSize)
+	if err == nil {
+		t.Fatalf("expected error with invalid font file: %s", dummyPath)
+	}
+
+	// invalid size test
+	properties, err = GetFaceProperties(fontData, invalidFontSize)
+	if err == nil {
+		t.Fatalf("expected error with invalid font size (%d)", invalidFontSize)
 	}
 }

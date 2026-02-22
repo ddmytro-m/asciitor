@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-FT_Error getFaceProperties(unsigned char *buffer, int bufferSize, int faceIndex, int fontSize, FaceProperties** outProperties) {
+FT_Error getFaceProperties(FaceParams* params, FaceProperties** outProperties) {
     FT_Library library = NULL;
     FT_Face face = NULL;
 
@@ -15,9 +15,9 @@ FT_Error getFaceProperties(unsigned char *buffer, int bufferSize, int faceIndex,
     
     if ((error = FT_Init_FreeType(&library))) return error;
 
-    if ((error = FT_New_Memory_Face(library, buffer, bufferSize, faceIndex, &face))) goto end;
+    if ((error = FT_New_Memory_Face(library, params->buffer, params->bufferSize, params->faceIndex, &face))) goto end;
 
-    if ((error = FT_Set_Pixel_Sizes(face, 0, fontSize))) goto end;
+    if ((error = FT_Set_Pixel_Sizes(face, 0, params->fontSize))) goto end;
 
     FaceProperties *properties = malloc(sizeof(FaceProperties));
     if (!properties) {

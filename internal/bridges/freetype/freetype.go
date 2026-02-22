@@ -5,6 +5,7 @@ package freetype
 import "C"
 import (
 	"fmt"
+	"runtime"
 	"unsafe"
 )
 
@@ -31,20 +32,44 @@ type FaceProperties struct {
 	MaxCharacterHeight int
 }
 
-func GetFaceProperties(buffer []byte, fontSize int) (*FaceProperties, error) {
+func newFaceParams(buffer []byte, fontSize int) C.FaceParams {
 	faceIndex := 0 // @TODO: multi-face fonts support
 
+	return C.FaceParams{
+		buffer:     (*C.uchar)(unsafe.Pointer(&buffer[0])),
+		bufferSize: C.int(len(buffer)),
+		faceIndex:  C.int(faceIndex),
+		fontSize:   C.int(fontSize),
+	}
+}
+
+func GetFaceProperties(buffer []byte, fontSize int) (*FaceProperties, error) {
+	if len(buffer) == 0 {
+		return nil, fmt.Errorf("font buffer is empty")
+	}
+	if fontSize <= 0 {
+		return nil, fmt.Errorf("font size invalid: %d", fontSize)
+	}
+
+	var p runtime.Pinner
+	defer p.Unpin()
+
+	p.Pin(&buffer[0])
+
+	var params C.FaceParams = newFaceParams(buffer, fontSize)
 	var properties *C.FaceProperties
 
-	err := C.getFaceProperties((*C.uchar)(unsafe.Pointer(&buffer[0])), C.int(len(buffer)), C.int(faceIndex), C.int(fontSize), &properties)
-	if err != 0 {
-		return nil, fmt.Errorf("%s (error code: 0x%02x)", getErrorMessage(int(err)), err)
+	errCode := C.getFaceProperties(&params, &properties)
+	if errCode != 0 {
+		return nil, fmt.Errorf("%s (error code: 0x%02x)", getErrorMessage(int(errCode)), errCode)
 	}
 
 	defer func() {
-		C.free(unsafe.Pointer(properties.styleName))
-		C.free(unsafe.Pointer(properties.familyName))
-		C.free(unsafe.Pointer(properties))
+		if properties != nil {
+			C.free(unsafe.Pointer(properties.styleName))
+			C.free(unsafe.Pointer(properties.familyName))
+			C.free(unsafe.Pointer(properties))
+		}
 	}()
 
 	return &FaceProperties{
