@@ -13,3 +13,7 @@ func GetRoot() string {
 func DataPath(relPath string) string {
 	return filepath.Join(GetRoot(), "test/data", relPath)
 }
+
+func TmpPath(relPath string) string {
+	return filepath.Join(GetRoot(), "test/tmp", relPath)
+}

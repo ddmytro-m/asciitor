@@ -32,3 +32,4 @@ go.work.sum
 .vscode/
 
 compile_flags.txt
+tmp/

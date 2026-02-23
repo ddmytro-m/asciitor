@@ -17,6 +17,8 @@ func getErrorMessage(errorCode int) string {
 		return "cannot render glyph"
 	case C.FT_Err_Invalid_Pixel_Size:
 		return "invalid font size"
+	case C.FT_Err_Out_Of_Memory:
+		return "out of memory"
 	default:
 		return "unknown error"
 	}
@@ -32,51 +34,121 @@ type FaceProperties struct {
 	MaxCharacterHeight int
 }
 
-func newFaceParams(buffer []byte, fontSize int) C.FaceParams {
-	faceIndex := 0 // @TODO: multi-face fonts support
-
-	return C.FaceParams{
-		buffer:     (*C.uchar)(unsafe.Pointer(&buffer[0])),
-		bufferSize: C.int(len(buffer)),
-		faceIndex:  C.int(faceIndex),
-		fontSize:   C.int(fontSize),
-	}
+type FaceParams struct {
+	FontBuffer []byte
+	FontSize   int
+	FaceIndex  int
 }
 
-func GetFaceProperties(buffer []byte, fontSize int) (*FaceProperties, error) {
-	if len(buffer) == 0 {
+func newFaceParams(params FaceParams) (*C.FaceParams, error) {
+	if len(params.FontBuffer) == 0 {
 		return nil, fmt.Errorf("font buffer is empty")
 	}
-	if fontSize <= 0 {
-		return nil, fmt.Errorf("font size invalid: %d", fontSize)
+	if params.FontSize <= 0 {
+		return nil, fmt.Errorf("font size invalid: %d", params.FontSize)
 	}
 
+	return &C.FaceParams{
+		buffer:     (*C.uchar)(unsafe.Pointer(&params.FontBuffer[0])),
+		bufferSize: C.int(len(params.FontBuffer)),
+		faceIndex:  C.int(params.FaceIndex),
+		fontSize:   C.int(params.FontSize),
+	}, nil
+}
+
+func GetFaceProperties(params FaceParams) (*FaceProperties, error) {
 	var p runtime.Pinner
+	p.Pin(&params.FontBuffer[0])
 	defer p.Unpin()
 
-	p.Pin(&buffer[0])
+	cParams, error := newFaceParams(params)
+	if error != nil {
+		return nil, error
+	}
 
-	var params C.FaceParams = newFaceParams(buffer, fontSize)
-	var properties *C.FaceProperties
+	var cProperties C.FaceProperties
 
-	errCode := C.getFaceProperties(&params, &properties)
+	errCode := C.getFaceProperties(cParams, &cProperties)
 	if errCode != 0 {
 		return nil, fmt.Errorf("%s (error code: 0x%02x)", getErrorMessage(int(errCode)), errCode)
 	}
 
-	defer func() {
-		if properties != nil {
-			C.free(unsafe.Pointer(properties.styleName))
-			C.free(unsafe.Pointer(properties.familyName))
-			C.free(unsafe.Pointer(properties))
-		}
-	}()
+	defer C.freeFaceProperties(&cProperties)
 
 	return &FaceProperties{
-		FamilyName:         C.GoString(properties.familyName),
-		StyleName:          C.GoString(properties.styleName),
-		Monospace:          bool(properties.monospace),
-		MaxCharacterWidth:  int(properties.maxCharacterWidth),
-		MaxCharacterHeight: int(properties.maxCharacterHeight),
+		FamilyName:         C.GoString(cProperties.familyName),
+		StyleName:          C.GoString(cProperties.styleName),
+		Monospace:          bool(cProperties.monospace),
+		MaxCharacterWidth:  int(cProperties.maxCharacterWidth),
+		MaxCharacterHeight: int(cProperties.maxCharacterHeight),
 	}, nil
+}
+
+type RenderedCharacter struct {
+	BitmapBuffer []byte
+	BitmapWidth  int
+	BitmapHeight int
+
+	LeftShift int
+	TopShift  int
+
+	Advance int
+}
+
+func RenderCharacters(params FaceParams, characters []rune) ([]*RenderedCharacter, error) {
+	var p runtime.Pinner
+	p.Pin(&params.FontBuffer[0])
+	defer p.Unpin()
+
+	cParams, error := newFaceParams(params)
+	if error != nil {
+		return nil, error
+	}
+
+	length := len(characters)
+	if length == 0 {
+		return nil, nil
+	}
+
+	cCharacters := (*C.uint)(unsafe.Pointer(&characters[0]))
+	cLength := C.int(length)
+
+	cRenderedChars := make([]*C.RenderedCharacter, length)
+	cRenderingErrors := make([]C.FT_Error, length)
+
+	errCode := C.renderCharacters(cParams, cCharacters, cLength, &cRenderedChars[0], &cRenderingErrors[0])
+	if errCode != 0 {
+		return nil, fmt.Errorf("freetype error: %s (error code: 0x%02x)", getErrorMessage(int(errCode)), errCode)
+	}
+
+	defer C.freeRenderedCharacters(&cRenderedChars[0], cLength)
+
+	// @TODO: log rendering errors
+
+	renderedCharacters := make([]*RenderedCharacter, length)
+
+	for i := range length {
+		cRC := cRenderedChars[i]
+		if cRC == nil {
+			renderedCharacters[i] = nil
+			continue
+		}
+
+		var buffer []byte
+		if cRC.bitmapBuffer != nil && cRC.bitmapWidth > 0 && cRC.bitmapHeight > 0 {
+			size := int(cRC.bitmapWidth * cRC.bitmapHeight)
+			buffer = C.GoBytes(unsafe.Pointer(cRC.bitmapBuffer), C.int(size))
+		}
+
+		renderedCharacters[i] = &RenderedCharacter{
+			BitmapBuffer: buffer,
+			BitmapWidth:  int(cRC.bitmapWidth),
+			BitmapHeight: int(cRC.bitmapHeight),
+			LeftShift:    int(cRC.leftShift),
+			TopShift:     int(cRC.topShift),
+			Advance:      int(cRC.advance),
+		}
+	}
+
+	return renderedCharacters, nil
 }

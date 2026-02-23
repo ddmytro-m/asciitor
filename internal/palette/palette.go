@@ -31,7 +31,7 @@ func NewPalette(face *font.FontFace, characters []rune) (*Palette, error) {
 func (p *Palette) SetFont(face *font.FontFace) error {
 	if !face.IsLoaded() {
 		return fmt.Errorf("font face is not loaded")
-	} else if !face.IsMonospace {
+	} else if !face.IsMonospace() {
 		return fmt.Errorf("only monospace fonts are currently supported")
 	}
 

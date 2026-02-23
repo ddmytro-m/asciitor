@@ -8,17 +8,17 @@ import (
 )
 
 type FontFace struct {
-	FontSize int
+	fontSize int
 
 	fontBuffer []byte
-	faceIndex  int
+	faceIndex  int // @TODO: multi-face fonts support
 
-	FamilyName string
-	StyleName  string
+	familyName string
+	styleName  string
 
-	IsMonospace        bool
-	MaxCharacterWidth  int
-	MaxCharacterHeight int
+	isMonospace        bool
+	maxCharacterWidth  int
+	maxCharacterHeight int
 
 	isLoaded bool
 }
@@ -29,12 +29,20 @@ func NewFontFace(fontSize int) *FontFace {
 	return &face
 }
 
+func (f *FontFace) getParams() freetype.FaceParams {
+	return freetype.FaceParams{
+		FontBuffer: f.fontBuffer,
+		FontSize:   f.fontSize,
+		FaceIndex:  f.faceIndex,
+	}
+}
+
 func (f *FontFace) updateProperties(properties *freetype.FaceProperties) {
-	f.FamilyName = properties.FamilyName
-	f.StyleName = properties.StyleName
-	f.IsMonospace = properties.Monospace
-	f.MaxCharacterWidth = properties.MaxCharacterWidth
-	f.MaxCharacterHeight = properties.MaxCharacterHeight
+	f.familyName = properties.FamilyName
+	f.styleName = properties.StyleName
+	f.isMonospace = properties.Monospace
+	f.maxCharacterWidth = properties.MaxCharacterWidth
+	f.maxCharacterHeight = properties.MaxCharacterHeight
 }
 
 func (f *FontFace) LoadFromFile(file string) error {
@@ -43,7 +51,10 @@ func (f *FontFace) LoadFromFile(file string) error {
 		return fmt.Errorf("failed to open font file: \"%s\"", file)
 	}
 
-	properties, err := freetype.GetFaceProperties(data, f.FontSize)
+	params := f.getParams()
+	params.FontBuffer = data
+
+	properties, err := freetype.GetFaceProperties(params)
 	if err != nil {
 		return fmt.Errorf("failed to get face properties: \"%s\"", err)
 	}
@@ -62,7 +73,7 @@ func (f *FontFace) ChangeFontSize(fontSize int) error {
 	}
 
 	if f.isLoaded {
-		properties, err := freetype.GetFaceProperties(f.fontBuffer, fontSize)
+		properties, err := freetype.GetFaceProperties(f.getParams())
 		if err != nil {
 			return fmt.Errorf("failed to get face properties: \"%s\"", err)
 		}
@@ -70,9 +81,13 @@ func (f *FontFace) ChangeFontSize(fontSize int) error {
 		f.updateProperties(properties)
 	}
 
-	f.FontSize = fontSize
+	f.fontSize = fontSize
 
 	return nil
+}
+
+func (f *FontFace) IsMonospace() bool {
+	return f.isMonospace
 }
 
 func (f *FontFace) IsLoaded() bool {
