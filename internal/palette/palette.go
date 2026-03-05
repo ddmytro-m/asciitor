@@ -2,47 +2,87 @@ package palette
 
 import (
 	"fmt"
+	"unicode"
 
-	"github.com/ddmytro-m/asciitor/internal/bitmap"
 	"github.com/ddmytro-m/asciitor/internal/font"
+	"github.com/ddmytro-m/asciitor/internal/utils"
 )
 
 type Palette struct {
-	face *font.FontFace // @TODO: fallback font
+	Face *font.FontFace // @TODO: fallback font
 
-	characters         []rune
-	renderedCharacters map[rune]*bitmap.Bitmap
-	isRendered         bool
+	charset      []rune
+	GlyphBitmaps []font.GlyphBitmap
+
+	isRendered bool
 }
 
-func NewPalette(face *font.FontFace, characters []rune) (*Palette, error) {
+func NewPalette(charset []rune, face *font.FontFace) (*Palette, error) {
 	palette := new(Palette)
 
-	err := palette.SetFont(face)
+	palette.SetCharset(charset)
+
+	err := palette.SetFace(face)
 	if err != nil {
 		return nil, err
 	}
 
-	palette.characters = characters
-
 	return palette, nil
 }
 
-func (p *Palette) SetFont(face *font.FontFace) error {
+func (p *Palette) IsRendered() bool {
+	return p.isRendered
+}
+
+func (p *Palette) SetCharset(charset []rune) {
+	var filteredCharset []rune
+	for _, character := range charset {
+		if unicode.IsGraphic(character) {
+			filteredCharset = append(filteredCharset, character)
+		}
+	}
+	filteredCharset = utils.RemoveDuplicates(filteredCharset)
+
+	if len(filteredCharset) != len(charset) {
+		fmt.Printf("ommited %d characters", len(charset)-len(filteredCharset))
+	}
+
+	p.charset = filteredCharset
+	p.isRendered = false
+}
+
+func (p *Palette) SetFace(face *font.FontFace) error {
 	if !face.IsLoaded() {
 		return fmt.Errorf("font face is not loaded")
 	} else if !face.IsMonospace() {
 		return fmt.Errorf("only monospace fonts are currently supported")
 	}
 
-	p.face = face
+	p.Face = face
 	p.isRendered = false
 
 	return nil
 }
 
-func (p *Palette) RenderCharacters() error {
-	// @TODO: characters rendering
+func (p *Palette) Render() error {
+	if p.Face == nil {
+		return fmt.Errorf("font face is required")
+	} else if !p.Face.IsLoaded() {
+		return fmt.Errorf("font face is not loaded")
+	}
 
-	return fmt.Errorf("under construction")
+	if len(p.charset) == 0 {
+		return fmt.Errorf("characters list is empty, nothing to render")
+	}
+
+	// @TODO: asynchronous render
+	rendered, err := p.Face.Render(p.charset)
+	if err != nil {
+		return fmt.Errorf("render error: %v", err)
+	}
+
+	p.GlyphBitmaps = rendered
+	p.isRendered = true
+
+	return nil
 }

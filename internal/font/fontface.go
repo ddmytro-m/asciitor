@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/ddmytro-m/asciitor/internal/bridges/freetype"
+	"github.com/ddmytro-m/asciitor/internal/graphics"
 )
 
 type FontFace struct {
@@ -29,6 +30,19 @@ func NewFontFace(fontSize int) *FontFace {
 	return &face
 }
 
+func (f *FontFace) IsMonospace() bool {
+	return f.isMonospace
+}
+
+func (f *FontFace) IsLoaded() bool {
+	return f.isLoaded
+}
+
+// @COMBAK: only for monospace fonts
+func (f *FontFace) GetCharacterDimensions() (maxWidth, maxHeight int) {
+	return f.maxCharacterWidth, f.maxCharacterHeight
+}
+
 func (f *FontFace) getParams() freetype.FaceParams {
 	return freetype.FaceParams{
 		FontBuffer: f.fontBuffer,
@@ -45,7 +59,7 @@ func (f *FontFace) updateProperties(properties *freetype.FaceProperties) {
 	f.maxCharacterHeight = properties.MaxCharacterHeight
 }
 
-func (f *FontFace) LoadFromFile(file string) error {
+func (f *FontFace) LoadFontFromFile(file string) error {
 	data, err := os.ReadFile(file)
 	if err != nil {
 		return fmt.Errorf("failed to open font file: \"%s\"", file)
@@ -59,6 +73,7 @@ func (f *FontFace) LoadFromFile(file string) error {
 		return fmt.Errorf("failed to get face properties: \"%s\"", err)
 	}
 
+	f.fontBuffer = data
 	f.updateProperties(properties)
 	f.isLoaded = true
 
@@ -86,10 +101,55 @@ func (f *FontFace) ChangeFontSize(fontSize int) error {
 	return nil
 }
 
-func (f *FontFace) IsMonospace() bool {
-	return f.isMonospace
+type GlyphBitmap struct {
+	Character rune
+	Bitmap    graphics.Bitmap
 }
 
-func (f *FontFace) IsLoaded() bool {
-	return f.isLoaded
+func (f *FontFace) Render(characters []rune) ([]GlyphBitmap, error) {
+	if !f.isLoaded {
+		return nil, fmt.Errorf("font face is not loaded")
+	}
+
+	rawChars, err := freetype.RenderCharacters(f.getParams(), characters)
+	if err != nil {
+		return nil, err
+	}
+
+	glyphBitmaps := make([]GlyphBitmap, 0, len(characters))
+
+	for i, rawChar := range rawChars {
+		if rawChar == nil {
+			continue
+		}
+
+		char := characters[i]
+		width := rawChar.Advance
+		height := f.maxCharacterHeight
+
+		charBitmap, err := graphics.NewBitmap(width, height)
+		if err != nil {
+			fmt.Printf("failed to create bitmap for character %q: %v\n", char, err)
+			continue
+		}
+
+		if rawChar.BitmapBuffer != nil {
+			for j := 0; j < rawChar.BitmapHeight; j++ {
+				srcStart := j * rawChar.BitmapWidth
+				srcEnd := srcStart + rawChar.BitmapWidth
+
+				dstStart := ((j + rawChar.TopShift) * width) + rawChar.LeftShift
+				dstEnd := dstStart + min(width, rawChar.BitmapWidth)
+
+				copy(charBitmap.Buffer[dstStart:dstEnd], rawChar.BitmapBuffer[srcStart:srcEnd])
+			}
+		}
+
+		glyphBitmaps = append(glyphBitmaps, GlyphBitmap{
+			Character: char,
+			Bitmap:    *charBitmap,
+		})
+	}
+
+	return glyphBitmaps, nil
 }

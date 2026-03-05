@@ -126,7 +126,7 @@ func TestRenderCharacters(t *testing.T) {
 	charsetPath := testutils.DataPath("charsets/alphanumeric.txt")
 	charsetData, err := os.ReadFile(charsetPath)
 	if err != nil {
-		t.Fatalf("SETUP FAILURE: could not load font file: %v", err)
+		t.Fatalf("SETUP FAILURE: could not load charset file: %v", err)
 	}
 
 	charsetStr := string(charsetData)
