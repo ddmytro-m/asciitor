@@ -33,3 +33,5 @@ go.work.sum
 
 compile_flags.txt
 tmp/
+
+__debug*

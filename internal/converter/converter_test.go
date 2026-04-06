@@ -7,12 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ddmytro-m/asciitor/internal/font"
+	"github.com/ddmytro-m/asciitor/font"
 	"github.com/ddmytro-m/asciitor/internal/palette"
 	"github.com/ddmytro-m/asciitor/internal/testutils"
 )
 
 var c *Converter
+var p *palette.Palette
 
 var asciiCharset []rune
 var brailleCharset []rune
@@ -20,13 +21,16 @@ var brailleCharset []rune
 func TestMain(m *testing.M) {
 	fontSize := 14
 
-	face := font.NewFontFace(fontSize)
-
 	fontPath := testutils.DataPath("fonts/DejaVuSansMono.ttf")
-	err := face.LoadFontFromFile(fontPath)
-
+	font, err := font.NewFontFromFile(fontPath)
 	if err != nil {
 		fmt.Printf("SETUP FAILURE: error during font loading: %v", err)
+		os.Exit(1)
+	}
+
+	face, err := font.GetFace(0)
+	if err != nil {
+		fmt.Printf("SETUP FAILURE: error during face loading: %v", err)
 		os.Exit(1)
 	}
 
@@ -39,24 +43,21 @@ func TestMain(m *testing.M) {
 	asciiStr := string(asciiData)
 	asciiCharset = []rune(asciiStr)
 
-	palette, err := palette.NewPalette(asciiCharset, face)
+	p, err = palette.NewPalette(asciiCharset, face, fontSize)
 	if err != nil {
 		fmt.Printf("SETUP FAILURE: error when creating palette: %v", err)
 		os.Exit(1)
 	}
 
-	err = palette.Render()
+	err = p.Render()
 	if err != nil {
 		fmt.Printf("SETUP FAILURE: could not render palette: %v", err)
 		os.Exit(1)
 	}
 
-	rows := 40
-	cols := 80
+	blockSize := 1
 
-	resolution := 1
-
-	c, err = NewConverter(rows, cols, palette, resolution, resolution)
+	c, err = NewConverter(p, blockSize)
 	if err != nil {
 		fmt.Printf("SETUP FAILURE: error when creating converter: %v", err)
 		os.Exit(1)
@@ -86,22 +87,35 @@ func writeConverted(data string, filename string) {
 	}
 }
 
-func TestConvert(t *testing.T) {
-	siemensStarBitmap, err := testutils.PngToBitmap(testutils.DataPath("images/siemens_star.png"))
+func TestMonospaceConvert(t *testing.T) {
+	siemensStarImg, err := testutils.PngToImage(testutils.DataPath("images/siemens_star.png"))
 	if err != nil {
 		t.Fatalf("could not load image: %v", err)
 	}
 
+	charW := p.GetMonospaceWidth()
+	charH := p.GetHeight()
+
+	cols := 80
+	rows := 40
+
+	renderSettings := RenderSettings{
+		MaxWidth:        cols * charW,
+		MaxHeight:       rows * charH,
+		KeepProportions: true,
+		Inverse:         false,
+	}
+
 	for i := range 5 {
-		resolution := i + 1
-		c.HorizontalResolution = resolution
-		c.VerticalResolution = resolution
+		blockSize := i + 1
+		c.SetBlockSize(blockSize)
+
 		err = c.Load()
 		if err != nil {
 			t.Fatalf("failed to load converter: %v", err)
 		}
 
-		starChars, err := c.Convert(*siemensStarBitmap)
+		starChars, err := c.Convert(siemensStarImg, renderSettings)
 		if err != nil {
 			t.Fatalf("error during convertion: %v", err)
 		}
@@ -110,19 +124,21 @@ func TestConvert(t *testing.T) {
 		for _, row := range starChars {
 			starString.WriteString(string(row) + "\n")
 		}
-		writeConverted(starString.String(), fmt.Sprintf("siemens_star_res=%d.txt", resolution))
+		writeConverted(starString.String(), fmt.Sprintf("siemens_star_block=%d.txt", blockSize))
 	}
 
 	// colored image
-	monaLisaBitmap, err := testutils.JpegToBitmap(testutils.DataPath("images/mona_lisa.jpeg"))
+	monaLisaImg, err := testutils.JpegToImage(testutils.DataPath("images/mona_lisa.jpeg"))
 	if err != nil {
 		t.Fatalf("could not load image: %v", err)
 	}
 
-	c.Rows = 35
-	c.Columns = 50
+	cols = 50
+	rows = 35
+	renderSettings.MaxWidth = cols * charW
+	renderSettings.MaxHeight = rows * charH
 
-	monaLisaChars, err := c.Convert(*monaLisaBitmap)
+	monaLisaChars, err := c.Convert(monaLisaImg, renderSettings)
 	if err != nil {
 		t.Fatalf("error during convertion: %v", err)
 	}
@@ -132,11 +148,4 @@ func TestConvert(t *testing.T) {
 		monaLisaString.WriteString(string(row) + "\n")
 	}
 	writeConverted(monaLisaString.String(), "mona_lisa.txt")
-
-	// resolution too high
-	c.HorizontalResolution = 15
-	err = c.Load()
-	if err == nil {
-		t.Fatalf("error expected for resolution = 15")
-	}
 }

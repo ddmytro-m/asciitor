@@ -3,8 +3,9 @@ Library that converts images into ascii "arts"
 
 ## TODO
 * Basic library functionality
-* Text recognition
 * CLI tool
+* Examples
+* Text recognition
 * README
-* xkcd to ascii tool
+* xkcd to ascii tool (More examples)
 * Frontend
