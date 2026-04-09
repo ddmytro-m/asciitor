@@ -3,6 +3,7 @@ package converter
 import (
 	"fmt"
 	"image"
+	"math"
 
 	"github.com/ddmytro-m/asciitor/internal/graphics"
 	"github.com/ddmytro-m/asciitor/internal/palette"
@@ -107,7 +108,7 @@ func (c *Converter) getDensityMaps() ([]GlyphDensityMap, error) {
 	return densityMaps, nil
 }
 
-func (c *Converter) calculateDimensions(img image.Image, settings RenderSettings) (width, height int) {
+func (c *Converter) calculateDimensions(img image.Image, settings *RenderSettings) (width, height int) {
 	srcW := float64(img.Bounds().Dx())
 	srcH := float64(img.Bounds().Dy())
 	imgRatio := srcW / srcH
@@ -170,7 +171,7 @@ func (c *Converter) calculateDimensions(img image.Image, settings RenderSettings
 	return width, height
 }
 
-func (c *Converter) prepareBitmap(img image.Image, settings RenderSettings) (*graphics.Bitmap, error) {
+func (c *Converter) prepareBitmap(img image.Image, settings *RenderSettings) (*graphics.Bitmap, error) {
 	width, height := c.calculateDimensions(img, settings)
 	bitmap, err := graphics.NewBitmap(width, height)
 	if err != nil {
@@ -179,18 +180,16 @@ func (c *Converter) prepareBitmap(img image.Image, settings RenderSettings) (*gr
 
 	bitmap.FillWithImage(img)
 
+	if settings.Inverse {
+		bitmap.Invert()
+	}
+
 	return bitmap, nil
 }
 
-// func (c *Converter) prepareSAT(image image.Image, settings RenderSettings) (*graphics.SummedAreaTable, error) {
+// func (c *Converter) prepareSAT(image image.Image, settings RenderSettings) (*graphics.SummedAreaTable, error) { }
 
-// }
-
-func (c *Converter) convertMonospace(img image.Image, settings RenderSettings) ([][]rune, error) {
-	if !c.isLoaded {
-		return nil, fmt.Errorf("can't convert bitmap: palette isn't rendered")
-	}
-
+func (c *Converter) convertMonospace(img image.Image, settings *RenderSettings) ([][]rune, error) {
 	bitmap, err := c.prepareBitmap(img, settings)
 	if err != nil {
 		return nil, err
@@ -208,10 +207,10 @@ func (c *Converter) convertMonospace(img image.Image, settings RenderSettings) (
 	for y := range rows {
 		output[y] = make([]rune, cols)
 		for x := range cols {
-			imgCol := x * charWidth
-			imgRow := y * charHeight
+			posX := x * charWidth
+			posY := y * charHeight
 
-			chunk, err := bitmap.GetChunk(imgCol, imgRow, imgCol+charWidth, imgRow+charHeight)
+			chunk, err := bitmap.GetChunk(posX, posY, posX+charWidth, posY+charHeight)
 			if err != nil {
 				return nil, err
 			}
@@ -244,8 +243,8 @@ func (c *Converter) getClosestMonospaceCharacter(dm *graphics.DensityMap) (rune,
 		return 0, err
 	}
 
-	for k := 1; k < len(c.glyphDensityMaps); k++ {
-		gdm := c.glyphDensityMaps[k]
+	for i := 1; i < len(c.glyphDensityMaps); i++ {
+		gdm := c.glyphDensityMaps[i]
 		d, err := dm.GetDistance(&gdm.densityMap)
 		if err != nil {
 			return 0, err
@@ -260,8 +259,77 @@ func (c *Converter) getClosestMonospaceCharacter(dm *graphics.DensityMap) (rune,
 	return closestChar, nil
 }
 
-func (c *Converter) convertProportional(img image.Image, settings RenderSettings) ([][]rune, error) {
-	return [][]rune{}, nil
+func (c *Converter) convertProportional(img image.Image, settings *RenderSettings) ([][]rune, error) {
+	bitmap, err := c.prepareBitmap(img, settings)
+	if err != nil {
+		return nil, err
+	}
+
+	charHeight := c.palette.GetHeight()
+	rows := bitmap.Height / charHeight
+
+	output := make([][]rune, rows)
+
+	for y := range rows {
+		line := make([]rune, 0)
+		posY := y * charHeight
+		cx := 0
+		for {
+			closestChar := rune(-1)
+			closestCharWidth := 0
+			distance := math.Inf(1)
+
+			for _, gdm := range c.glyphDensityMaps {
+				if cx+gdm.width > bitmap.Width {
+					// adding this character will result in width overflow
+					continue
+				}
+
+				x1 := cx
+				y1 := posY
+
+				x2 := x1 + gdm.width
+				y2 := y1 + charHeight
+
+				// @TODO: cache different rectangles
+				chunk, err := bitmap.GetChunk(x1, y1, x2, y2)
+				if err != nil {
+					return nil, err
+				}
+
+				chunkDensityMap, err := graphics.NewDensityMapFromBitmap(chunk, c.blockSize)
+				if err != nil {
+					return nil, err
+				}
+
+				charDistance, err := chunkDensityMap.GetDistance(&gdm.densityMap)
+				if err != nil {
+					return nil, err
+				}
+
+				// exponent is chosen to balance between mathematical pixel error (c = 0.5) and solving greedy algorithm bias (c = 1)
+				// may be added as a parameter
+				normalizedDistance := charDistance / math.Pow(float64(gdm.width), 0.75)
+
+				if normalizedDistance < distance {
+					distance = normalizedDistance
+					closestChar = gdm.charcode
+					closestCharWidth = gdm.width
+				}
+			}
+
+			if closestChar != -1 {
+				line = append(line, closestChar)
+				cx += closestCharWidth
+			} else {
+				break
+			}
+		}
+
+		output[y] = line
+	}
+
+	return output, nil
 }
 
 func (c *Converter) Convert(img image.Image, settings RenderSettings) ([][]rune, error) {
@@ -272,8 +340,8 @@ func (c *Converter) Convert(img image.Image, settings RenderSettings) ([][]rune,
 	}
 
 	if c.palette.IsMonospace() {
-		return c.convertMonospace(img, settings)
+		return c.convertMonospace(img, &settings)
 	} else {
-		return c.convertProportional(img, settings)
+		return c.convertProportional(img, &settings)
 	}
 }

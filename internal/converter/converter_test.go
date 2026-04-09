@@ -12,61 +12,81 @@ import (
 	"github.com/ddmytro-m/asciitor/internal/testutils"
 )
 
-var c *Converter
-var p *palette.Palette
+var monospaceConverter, proportionalConverter, brailleConverter *Converter
+var monospacePalette, proportionalPalette, braillePalette *palette.Palette
 
-var asciiCharset []rune
-var brailleCharset []rune
+var asciiCharset, brailleCharset []rune
 
-func TestMain(m *testing.M) {
-	fontSize := 14
+func loadCharsetFromFile(path string) []rune {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Printf("SETUP FAILURE: could not load charset file: %v", err)
+		os.Exit(1)
+	}
+	str := string(data)
+	return []rune(str)
+}
 
-	fontPath := testutils.DataPath("fonts/DejaVuSansMono.ttf")
-	font, err := font.NewFontFromFile(fontPath)
+func loadFaceFromFile(path string, faceIndex int) *font.Face {
+	font, err := font.NewFontFromFile(path)
 	if err != nil {
 		fmt.Printf("SETUP FAILURE: error during font loading: %v", err)
 		os.Exit(1)
 	}
 
-	face, err := font.GetFace(0)
+	face, err := font.GetFace(faceIndex)
 	if err != nil {
 		fmt.Printf("SETUP FAILURE: error during face loading: %v", err)
 		os.Exit(1)
 	}
 
-	asciiPath := testutils.DataPath("charsets/ascii.txt")
-	asciiData, err := os.ReadFile(asciiPath)
-	if err != nil {
-		fmt.Printf("SETUP FAILURE: could not load charset file: %v", err)
-		os.Exit(1)
-	}
-	asciiStr := string(asciiData)
-	asciiCharset = []rune(asciiStr)
+	return face
+}
 
-	p, err = palette.NewPalette(asciiCharset, face, fontSize)
+func newPalette(charset []rune, face *font.Face, fontSize int) *palette.Palette {
+	palette, err := palette.NewPalette(charset, face, fontSize)
 	if err != nil {
 		fmt.Printf("SETUP FAILURE: error when creating palette: %v", err)
 		os.Exit(1)
 	}
+	return palette
+}
 
-	err = p.Render()
-	if err != nil {
-		fmt.Printf("SETUP FAILURE: could not render palette: %v", err)
-		os.Exit(1)
-	}
-
-	blockSize := 1
-
-	c, err = NewConverter(p, blockSize)
+func newConverter(palette *palette.Palette, blockSize int) *Converter {
+	converter, err := NewConverter(palette, blockSize)
 	if err != nil {
 		fmt.Printf("SETUP FAILURE: error when creating converter: %v", err)
 		os.Exit(1)
 	}
-	err = c.Load()
-	if err != nil {
-		fmt.Printf("SETUP FAILURE: could not load converter: %v", err)
-		os.Exit(1)
-	}
+	return converter
+}
+
+func TestMain(m *testing.M) {
+	fontSize := 14
+
+	asciiPath := testutils.DataPath("charsets/ascii.txt")
+	braillePath := testutils.DataPath("charsets/braille.txt")
+
+	asciiCharset = loadCharsetFromFile(asciiPath)
+	brailleCharset = loadCharsetFromFile(braillePath)
+
+	monoPath := testutils.DataPath("fonts/DejaVuSansMono.ttf")
+	propPath := testutils.DataPath("fonts/Inter_18pt-Regular.ttf")
+	symbPath := testutils.DataPath("fonts/NotoSansSymbols2-Regular.ttf")
+
+	monoFace := loadFaceFromFile(monoPath, 0)
+	propFace := loadFaceFromFile(propPath, 0)
+	symbFace := loadFaceFromFile(symbPath, 0)
+
+	monospacePalette = newPalette(asciiCharset, monoFace, fontSize)
+	proportionalPalette = newPalette(asciiCharset, propFace, fontSize)
+	braillePalette = newPalette(brailleCharset, symbFace, fontSize)
+
+	blockSize := 3
+
+	monospaceConverter = newConverter(monospacePalette, blockSize)
+	proportionalConverter = newConverter(proportionalPalette, blockSize)
+	brailleConverter = newConverter(braillePalette, blockSize)
 
 	m.Run()
 }
@@ -87,14 +107,28 @@ func writeConverted(data string, filename string) {
 	}
 }
 
-func TestMonospaceConvert(t *testing.T) {
+func outputToString(output [][]rune) string {
+	var outString strings.Builder
+	for _, row := range output {
+		outString.WriteString(string(row) + "\n")
+	}
+	return outString.String()
+}
+
+func TestConvert(t *testing.T) {
+	// monospace
 	siemensStarImg, err := testutils.PngToImage(testutils.DataPath("images/siemens_star.png"))
 	if err != nil {
 		t.Fatalf("could not load image: %v", err)
 	}
 
-	charW := p.GetMonospaceWidth()
-	charH := p.GetHeight()
+	err = monospacePalette.Render()
+	if err != nil {
+		t.Fatalf("could not render palette: %v", err)
+	}
+
+	charW := monospacePalette.GetMonospaceWidth()
+	charH := monospacePalette.GetHeight()
 
 	cols := 80
 	rows := 40
@@ -108,44 +142,79 @@ func TestMonospaceConvert(t *testing.T) {
 
 	for i := range 5 {
 		blockSize := i + 1
-		c.SetBlockSize(blockSize)
+		monospaceConverter.SetBlockSize(blockSize)
 
-		err = c.Load()
+		err = monospaceConverter.Load()
 		if err != nil {
 			t.Fatalf("failed to load converter: %v", err)
 		}
 
-		starChars, err := c.Convert(siemensStarImg, renderSettings)
+		starChars, err := monospaceConverter.Convert(siemensStarImg, renderSettings)
 		if err != nil {
 			t.Fatalf("error during convertion: %v", err)
 		}
+		writeConverted(outputToString(starChars), fmt.Sprintf("siemens_star_block=%d.txt", blockSize))
+	}
 
-		var starString strings.Builder
-		for _, row := range starChars {
-			starString.WriteString(string(row) + "\n")
+	// inverted images
+	renderSettings.Inverse = true
+	for i := range 5 {
+		blockSize := i + 1
+		monospaceConverter.SetBlockSize(blockSize)
+
+		err = monospaceConverter.Load()
+		if err != nil {
+			t.Fatalf("failed to load converter: %v", err)
 		}
-		writeConverted(starString.String(), fmt.Sprintf("siemens_star_block=%d.txt", blockSize))
+
+		starChars, err := monospaceConverter.Convert(siemensStarImg, renderSettings)
+		if err != nil {
+			t.Fatalf("error during convertion: %v", err)
+		}
+		writeConverted(outputToString(starChars), fmt.Sprintf("siemens_star_inverse_block=%d.txt", blockSize))
 	}
 
 	// colored image
+	renderSettings.Inverse = false
 	monaLisaImg, err := testutils.JpegToImage(testutils.DataPath("images/mona_lisa.jpeg"))
+
 	if err != nil {
 		t.Fatalf("could not load image: %v", err)
 	}
+	monospaceConverter.SetBlockSize(3)
 
 	cols = 50
 	rows = 35
 	renderSettings.MaxWidth = cols * charW
 	renderSettings.MaxHeight = rows * charH
 
-	monaLisaChars, err := c.Convert(monaLisaImg, renderSettings)
+	monoLisa, err := monospaceConverter.Convert(monaLisaImg, renderSettings)
 	if err != nil {
-		t.Fatalf("error during convertion: %v", err)
+		t.Errorf("error during convertion: %v", err)
+	} else {
+		writeConverted(outputToString(monoLisa), "mona_lisa_mono.txt")
 	}
 
-	var monaLisaString strings.Builder
-	for _, row := range monaLisaChars {
-		monaLisaString.WriteString(string(row) + "\n")
+	// proportional
+	proportionalSettings := RenderSettings{
+		MaxWidth:        400,
+		MaxHeight:       400,
+		Inverse:         false,
+		KeepProportions: true,
 	}
-	writeConverted(monaLisaString.String(), "mona_lisa.txt")
+
+	monaLisaProp, err := proportionalConverter.Convert(monaLisaImg, proportionalSettings)
+	if err != nil {
+		t.Errorf("error during convertion: %v", err)
+	} else {
+		writeConverted(outputToString(monaLisaProp), "mona_lisa_proportional.txt")
+	}
+
+	// braille
+	monaLisaBraille, err := brailleConverter.Convert(monaLisaImg, proportionalSettings)
+	if err != nil {
+		t.Errorf("error during convertion: %v", err)
+	} else {
+		writeConverted(outputToString(monaLisaBraille), "mona_lisa_braille.txt")
+	}
 }

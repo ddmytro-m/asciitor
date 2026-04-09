@@ -87,3 +87,9 @@ func (b *Bitmap) GetChunk(x1, y1, x2, y2 int) (*Bitmap, error) {
 		Buffer: newBuffer,
 	}, nil
 }
+
+func (b *Bitmap) Invert() {
+	for i := range b.Buffer {
+		b.Buffer[i] = 255 - b.Buffer[i]
+	}
+}
