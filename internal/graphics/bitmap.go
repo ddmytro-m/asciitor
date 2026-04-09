@@ -1,6 +1,11 @@
 package graphics
 
-import "fmt"
+import (
+	"fmt"
+	"image"
+
+	"golang.org/x/image/draw"
+)
 
 type Bitmap struct {
 	Width  int
@@ -20,75 +25,71 @@ func NewBitmap(width, height int) (*Bitmap, error) {
 	}, nil
 }
 
-func (b *Bitmap) getChunksDimensions(cols, rows int) (chunkWidths, chunkHeights []int) {
-	fChunkWidth := float64(b.Width) / float64(cols)
-	fChunkHeight := float64(b.Height) / float64(rows)
+func NewBitmapFromImage(img image.Image) (*Bitmap, error) {
+	bounds := img.Bounds()
+	w, h := bounds.Dx(), bounds.Dy()
 
-	chunkWidths = make([]int, cols)
-	chunkHeights = make([]int, rows)
+	var grayImg *image.Gray
 
-	totalWidth := 0
-	for col := 0; col < cols-1; col++ {
-		w := int(fChunkWidth*float64(col+1) - float64(totalWidth))
-		totalWidth += w
-		chunkWidths[col] = w
+	if g, ok := img.(*image.Gray); ok {
+		grayImg = g
+	} else {
+		grayImg = image.NewGray(bounds)
+		draw.Draw(grayImg, bounds, img, bounds.Min, draw.Src)
 	}
-	chunkWidths[cols-1] = b.Width - totalWidth
 
-	totalHeight := 0
-	for row := 0; row < rows-1; row++ {
-		h := int(fChunkHeight*float64(row+1) - float64(totalHeight))
-		totalHeight += h
-		chunkHeights[row] = h
+	bitmap, err := NewBitmap(w, h)
+	if err != nil {
+		return nil, err
 	}
-	chunkHeights[rows-1] = b.Height - totalHeight
+	bitmap.Buffer = grayImg.Pix
 
-	return
+	return bitmap, nil
 }
 
-func (b *Bitmap) SplitIntoChunks(cols, rows int) ([][]Bitmap, error) {
-	if cols >= b.Width || rows >= b.Height {
-		return nil, fmt.Errorf("unable to split bitmap into chunks: it is too small")
+func (b *Bitmap) FillWithImage(img image.Image) error {
+	rect := image.Rect(0, 0, b.Width, b.Height)
+	monoImg := image.NewGray(rect)
+
+	draw.BiLinear.Scale(monoImg, rect, img, img.Bounds(), draw.Src, nil)
+
+	b.Buffer = monoImg.Pix
+
+	return nil
+}
+
+func (b *Bitmap) GetChunk(x1, y1, x2, y2 int) (*Bitmap, error) {
+	if x1 < 0 || y1 < 0 || x2 > b.Width || y2 > b.Height {
+		return nil, fmt.Errorf("coordinates out of bounds: [%d, %d] to [%d, %d] for bitmap %dx%d", x1, y1, x2, y2, b.Width, b.Height)
 	}
 
-	chunks := make([][]Bitmap, rows)
+	newWidth := x2 - x1
+	newHeight := y2 - y1
 
-	chunkWidths, chunkHeights := b.getChunksDimensions(cols, rows)
-
-	yCursor := 0
-	for row := range rows {
-		chunks[row] = make([]Bitmap, cols)
-
-		chunkHeight := chunkHeights[row]
-
-		xCursor := 0
-		for col := range cols {
-			chunkWidth := chunkWidths[col]
-
-			bitmap, err := NewBitmap(chunkWidth, chunkHeight)
-			if err != nil {
-				return nil, err
-			}
-
-			bitmap.Buffer = make([]byte, chunkWidth*chunkHeight)
-
-			for i := range chunkHeight {
-				srcStart := yCursor*b.Width + xCursor + i*b.Width
-				srcEnd := srcStart + chunkWidth
-
-				dstStart := i * chunkWidth
-				dstEnd := dstStart + chunkWidth
-
-				copy(bitmap.Buffer[dstStart:dstEnd], b.Buffer[srcStart:srcEnd])
-			}
-
-			chunks[row][col] = *bitmap
-
-			xCursor += chunkWidth
-		}
-
-		yCursor += chunkHeight
+	if newWidth <= 0 || newHeight <= 0 {
+		return nil, fmt.Errorf("invalid chunk dimensions: %dx%d", newWidth, newHeight)
 	}
 
-	return chunks, nil
+	newBuffer := make([]byte, newWidth*newHeight)
+
+	for y := range newHeight {
+		srcStart := (y1+y)*b.Width + x1
+		srcEnd := srcStart + newWidth
+
+		dstStart := y * newWidth
+
+		copy(newBuffer[dstStart:dstStart+newWidth], b.Buffer[srcStart:srcEnd])
+	}
+
+	return &Bitmap{
+		Width:  newWidth,
+		Height: newHeight,
+		Buffer: newBuffer,
+	}, nil
+}
+
+func (b *Bitmap) Invert() {
+	for i := range b.Buffer {
+		b.Buffer[i] = 255 - b.Buffer[i]
+	}
 }

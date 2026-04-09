@@ -6,14 +6,14 @@ import (
 	"image/png"
 	"os"
 	"path"
+	"path/filepath"
 	"testing"
 
 	"github.com/ddmytro-m/asciitor/internal/testutils"
 )
 
-var validFace = FaceParams{FaceIndex: 0, FontSize: 16}
-var dummyFace = FaceParams{FaceIndex: 0, FontSize: 16}
-var invalidFace = FaceParams{FaceIndex: 0, FontSize: -1}
+var validFont, dummyFont FontParams
+var validFace, invalidFace FaceParams
 
 func TestMain(m *testing.M) {
 	fontPath := testutils.DataPath("fonts/DejaVuSansMono.ttf")
@@ -22,9 +22,7 @@ func TestMain(m *testing.M) {
 		fmt.Println("SETUP FAILURE: could not load font file:", err)
 		os.Exit(1)
 	}
-
-	validFace.FontBuffer = fontData
-	invalidFace.FontBuffer = fontData
+	validFont.Buffer = fontData
 
 	dummyPath := testutils.DataPath("fonts/dummy.ttf")
 	dummyData, err := os.ReadFile(dummyPath)
@@ -32,10 +30,32 @@ func TestMain(m *testing.M) {
 		fmt.Println("SETUP FAILURE: could not load dummy font file:", err)
 		os.Exit(1)
 	}
+	dummyFont.Buffer = dummyData
 
-	dummyFace.FontBuffer = dummyData
+	validFace.FontParams = validFont
+	invalidFace.FontParams = validFont
+
+	validFace.FaceIndex = 0
+	invalidFace.FaceIndex = 1234
 
 	m.Run()
+}
+
+func TestGetFontProperties(t *testing.T) {
+	properties, err := GetFontProperties(validFont)
+
+	if properties.FamilyName != "DejaVu Sans Mono" {
+		t.Errorf("expected FamilyName to be \"DejaVu Sans Mono\", got: %s", properties.FamilyName)
+	}
+	if properties.FacesAmount <= 0 {
+		t.Errorf("expected FacesAmount to be greater than 0, got: %d", properties.FacesAmount)
+	}
+
+	// dummy test
+	_, err = GetFontProperties(dummyFont)
+	if err == nil {
+		t.Errorf("expected error with invalid font file")
+	}
 }
 
 func TestGetFaceProperties(t *testing.T) {
@@ -45,9 +65,6 @@ func TestGetFaceProperties(t *testing.T) {
 		t.Fatalf("could not get face properties: %v", err)
 	}
 
-	if properties.FamilyName != "DejaVu Sans Mono" {
-		t.Errorf("expected FamilyName to be \"DejaVu Sans Mono\", got: %s", properties.FamilyName)
-	}
 	if properties.StyleName != "Book" {
 		t.Errorf("expected StyleName to be \"Book\", got: %s", properties.StyleName)
 	}
@@ -56,49 +73,35 @@ func TestGetFaceProperties(t *testing.T) {
 		t.Errorf("expected Monospace to be true, got: %t", properties.Monospace)
 	}
 
-	if properties.MaxCharacterWidth <= 0 {
-		t.Errorf("expected MaxCharacterWidth to be bigger than 0, got: %d", properties.MaxCharacterWidth)
-	}
-	if properties.MaxCharacterHeight <= 0 {
-		t.Errorf("expected MaxCharacterHeight to be bigger than 0, got: %d", properties.MaxCharacterHeight)
-	}
-
-	// dummy test
-	properties, err = GetFaceProperties(dummyFace)
-	if err == nil {
-		t.Fatalf("expected error with invalid font file")
-	}
-
-	// invalid size test
+	// invalid face test
 	properties, err = GetFaceProperties(invalidFace)
 	if err == nil {
-		t.Fatalf("expected error with invalid font size (-1)")
+		t.Fatalf("expected error with invalid face index (1234)")
 	}
 }
 
-func writeRenderedCharacters(charset []rune, rendered []*RenderedCharacter, fontSize int, font string) {
-	outDir := testutils.TmpPath("rendered/freetypeBitmaps")
+func writeRenderedCharacters(charsetName string, rendered RenderOutput, fontSize int, font string) {
+	outDir := testutils.TmpPath(filepath.Join("rendered/bitmaps", charsetName))
 	err := os.MkdirAll(outDir, os.ModePerm)
 	if err != nil {
 		fmt.Printf("failed to create directory %s: %v\n", outDir, err)
 		return
 	}
 
-	for i := range len(charset) {
-		renderedChar := rendered[i]
-		if renderedChar == nil || renderedChar.BitmapBuffer == nil {
+	for _, char := range rendered.Characters {
+		if char.BitmapWidth <= 0 || char.BitmapHeight <= 0 || char.BitmapBuffer == nil {
+			fmt.Printf("Skipping empty character U+%04X\n", char.Charcode)
 			continue
 		}
 
-		char := charset[i]
-		unicodeStr := fmt.Sprintf("U+%04X", char)
+		unicodeStr := fmt.Sprintf("U+%04X", char.Charcode)
 		fileName := fmt.Sprintf("%s_%s_%dpx.png", unicodeStr, font, fontSize)
 		filePath := path.Join(outDir, fileName)
 
-		img := image.NewGray(image.Rect(0, 0, renderedChar.BitmapWidth, renderedChar.BitmapHeight))
-		img.Pix = renderedChar.BitmapBuffer
+		img := image.NewGray(image.Rect(0, 0, char.BitmapWidth, char.BitmapHeight))
+		img.Pix = char.BitmapBuffer
 
-		f, err := os.OpenFile(filePath, os.O_RDWR, os.ModePerm)
+		f, err := os.OpenFile(filePath, os.O_CREATE|os.O_RDWR, os.ModePerm)
 		if err != nil {
 			fmt.Printf("error writing file %s: %v\n", fileName, err)
 			break
@@ -114,42 +117,67 @@ func writeRenderedCharacters(charset []rune, rendered []*RenderedCharacter, font
 }
 
 func TestRenderCharacters(t *testing.T) {
-	faceParams := FaceParams{FaceIndex: 0, FontSize: 16}
-
-	fontPath := testutils.DataPath("fonts/DejaVuSansMono.ttf")
-	fontData, err := os.ReadFile(fontPath)
-	if err != nil {
-		t.Fatalf("SETUP FAILURE: could not load font file: %v", err)
-	}
-	faceParams.FontBuffer = fontData
-
-	charsetPath := testutils.DataPath("charsets/alphanumeric.txt")
-	charsetData, err := os.ReadFile(charsetPath)
-	if err != nil {
-		t.Fatalf("SETUP FAILURE: could not load charset file: %v", err)
+	supportedCharsets := []string{
+		"alphanumeric",
+		"ascii",
 	}
 
-	charsetStr := string(charsetData)
-	charset := []rune(charsetStr)
+	for _, charsetFile := range supportedCharsets {
+		charsetPath := testutils.DataPath(filepath.Join("charsets", charsetFile+".txt"))
+		charsetData, err := os.ReadFile(charsetPath)
+		if err != nil {
+			t.Fatalf("SETUP FAILURE: could not load charset file: %v", err)
+		}
 
-	characters, error := RenderCharacters(faceParams, charset)
-	if error != nil {
-		t.Fatalf("error during rendering characters: %v", error)
+		charsetStr := string(charsetData)
+		charset := []rune(charsetStr)
+
+		rendered, error := Render(validFace, 16, charset)
+		if error != nil {
+			t.Fatalf("error during rendering characters: %v", error)
+		}
+
+		if len(rendered.Characters) == 0 {
+			t.Fatalf("failed to render characters")
+		} else if len(rendered.Characters[0].BitmapBuffer) != 0 {
+			t.Errorf("whitespace bitmap should be empty")
+		} else if rendered.Characters[0].Advance <= 0 {
+			t.Errorf("whitespace advance expected to be larger than zero, got: %d", rendered.Characters[0].Advance)
+		}
+
+		for i := 1; i < len(rendered.Characters); i++ {
+			if rendered.Characters[i].BitmapBuffer == nil {
+				t.Errorf("bitmap must be non-empty for character %c", charset[i])
+			}
+		}
+
+		writeRenderedCharacters(charsetFile, rendered, 16, "DejaVuSansMono")
 	}
 
-	if characters[0] == nil {
-		t.Errorf("failed to render whitespace")
-	} else if len(characters[0].BitmapBuffer) != 0 {
-		t.Errorf("whitespace bitmap should be empty")
-	} else if characters[0].Advance <= 0 {
-		t.Errorf("whitespace advance expected to be larger than zero, got: %d", characters[0].Advance)
+	unsupportedCharsets := []string{
+		"braille",
 	}
 
-	for i := 1; i < len(characters); i++ {
-		if characters[i].BitmapBuffer == nil {
-			t.Errorf("bitmap must be non-empty for character %c", charset[i])
+	for _, charsetFile := range unsupportedCharsets {
+		charsetPath := testutils.DataPath(filepath.Join("charsets", charsetFile+".txt"))
+		charsetData, err := os.ReadFile(charsetPath)
+		if err != nil {
+			t.Fatalf("SETUP FAILURE: could not load charset file: %v", err)
+		}
+
+		charsetStr := string(charsetData)
+		charset := []rune(charsetStr)
+
+		rendered, error := Render(validFace, 16, charset)
+		if error != nil {
+			t.Fatalf("error during rendering characters: %v", error)
+		}
+
+		if len(rendered.Characters) != 0 {
+			t.Fatalf("there should be no rendered characters for unsupported charset, got: %d", len(rendered.Characters))
+		}
+		if len(rendered.Errors) != len(charset) {
+			t.Errorf("for unsupported charset %d errors expected, got: %d", len(charset), len(rendered.Errors))
 		}
 	}
-
-	writeRenderedCharacters(charset, characters, 16, "DejaVuSansMono")
 }
