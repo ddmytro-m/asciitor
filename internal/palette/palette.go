@@ -71,22 +71,32 @@ func (p *Palette) SetCharset(charset []rune) error {
 	return nil
 }
 
-func (p *Palette) SetFace(face *font.Face) {
+func (p *Palette) SetFace(face *font.Face) error {
+	if face == nil {
+		return fmt.Errorf("trying to assign nil as a font face")
+	}
+
 	if face == p.face {
-		return
+		return nil
 	}
 
 	p.face = face
 	p.isRendered = false
+	return nil
 }
 
-func (p *Palette) SetFontSize(fontSize int) {
+func (p *Palette) SetFontSize(fontSize int) error {
+	if fontSize < 1 {
+		return fmt.Errorf("font size is too small: %dpx", fontSize)
+	}
+
 	if fontSize == p.fontSize {
-		return
+		return nil
 	}
 
 	p.fontSize = fontSize
 	p.isRendered = false
+	return nil
 }
 
 func (p *Palette) Render() error {

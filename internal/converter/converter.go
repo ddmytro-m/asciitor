@@ -38,7 +38,7 @@ type RenderSettings struct {
 }
 
 func NewConverter(pal *palette.Palette, blockSize int) (*Converter, error) {
-	if blockSize <= 0 {
+	if blockSize < 1 {
 		return nil, fmt.Errorf("invalid block size")
 	}
 
@@ -50,6 +50,14 @@ func NewConverter(pal *palette.Palette, blockSize int) (*Converter, error) {
 		palette:   pal,
 		blockSize: blockSize,
 	}, nil
+}
+
+func (c *Converter) IsLoaded() bool {
+	if c.palette.Version() != c.loadedPaletteVersion {
+		c.isLoaded = false
+	}
+
+	return c.isLoaded
 }
 
 func (c *Converter) Load() error {
@@ -74,13 +82,18 @@ func (c *Converter) Load() error {
 	return nil
 }
 
-func (c *Converter) SetBlockSize(blockSize int) {
+func (c *Converter) SetBlockSize(blockSize int) error {
+	if blockSize < 1 {
+		return fmt.Errorf("invalid block size: %dpx", blockSize)
+	}
+
 	if blockSize == c.blockSize {
-		return
+		return nil
 	}
 
 	c.blockSize = blockSize
 	c.isLoaded = false
+	return nil
 }
 
 func (c *Converter) getDensityMaps() ([]GlyphDensityMap, error) {
@@ -333,7 +346,7 @@ func (c *Converter) convertProportional(img image.Image, settings *RenderSetting
 }
 
 func (c *Converter) Convert(img image.Image, settings RenderSettings) ([][]rune, error) {
-	if !c.isLoaded || c.loadedPaletteVersion != c.palette.Version() {
+	if !c.IsLoaded() {
 		if err := c.Load(); err != nil {
 			return nil, err
 		}
