@@ -1,11 +1,20 @@
 PKGS = freetype2
 FLAGS_FILE = compile_flags.txt
 
-.PHONY: all clean flags
+.PHONY: all run\:cli flags clean
 
-all: flags
+all: run\:cli
+
+run\:cli:
+	go run cmd/asciitor/main.go
+
+test:
+	go test -v ./...
 
 flags:
 	@echo "Generating $(FLAGS_FILE) for packages $(PKGS)"
 	@pkg-config --cflags-only-I $(PKGS) | tr ' ' '\n' > $(FLAGS_FILE)
 	@echo "Done."
+
+clean:
+	rm $(FLAGS_FILE)
