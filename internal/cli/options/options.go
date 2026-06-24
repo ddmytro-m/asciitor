@@ -35,7 +35,7 @@ var Flags = []cli.Flag{
 		Name:      "width",
 		Aliases:   []string{"w"},
 		Value:     "tw",
-		Usage:     "max output width: \"100px\", \"12M\" (12 letters M), \"original\" (image width), \"tw\" (terminal width)",
+		Usage:     "max output width: \"100px\", \"12M\" (12 letters M), \"original\" (image width), \"tw\" (terminal width - 1 line)",
 		Validator: validateWidth,
 	},
 	&cli.StringFlag{

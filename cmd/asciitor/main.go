@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 
+	"github.com/ddmytro-m/asciitor/internal/cli/app"
 	"github.com/ddmytro-m/asciitor/internal/cli/options"
 	"github.com/urfave/cli/v3"
 )
@@ -24,22 +24,7 @@ func main() {
 		Flags: options.Flags,
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			values := options.Parse(cmd)
-
-			in, err := options.OpenInput(values.Input)
-			if err != nil {
-				return err
-			}
-			defer in.Close()
-
-			out, err := options.OpenOutput(values.Output)
-			if err != nil {
-				return err
-			}
-			defer out.Close()
-
-			fmt.Printf("options: %+v\n", values)
-
-			return nil
+			return app.Run(ctx, values)
 		},
 	}
 	if err := cmd.Run(context.Background(), os.Args); err != nil {

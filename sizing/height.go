@@ -25,7 +25,7 @@ type HeightPixels struct {
 	Pixels int
 }
 
-func (o WidthPixels) GetHeight(img image.Image, palette *palette.Palette, blockSize int) (int, error) {
+func (o HeightPixels) GetHeight(img image.Image, palette *palette.Palette, blockSize int) (int, error) {
 	if o.Pixels <= 0 {
 		return -1, fmt.Errorf("invalid height size: %dpx", o.Pixels)
 	}
