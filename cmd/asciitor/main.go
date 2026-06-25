@@ -15,15 +15,13 @@ func main() {
 		Name:      "asciitor",
 		Usage:     "convert an image to ASCII art",
 		ArgsUsage: "[INPUT]",
-		Arguments: []cli.Argument{
-			&cli.StringArg{
-				Name:      "input",
-				UsageText: "input image file; omit or \"-\" to read from stdin",
-			},
-		},
-		Flags: options.Flags,
+		Arguments: options.Arguments,
+		Flags:     options.Flags,
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			values := options.Parse(cmd)
+			values, err := options.Parse(cmd)
+			if err != nil {
+				return err
+			}
 			return app.Run(ctx, values)
 		},
 	}

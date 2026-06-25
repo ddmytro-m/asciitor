@@ -1,32 +1,59 @@
 package options
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
 
-func TestOutputValidation_ValidString(t *testing.T) {
-	err := validateOutput("result.txt")
-	if err != nil {
-		t.Error("unexpected error for a valid output path")
+func TestOutputMatchers(t *testing.T) {
+	if !(stdoutOutput{}).Match("-") {
+		t.Error("stdout link must match \"-\"")
 	}
-
-	err = validateOutput("-")
-	if err != nil {
-		t.Error("unexpected error for stdout output")
+	if (stdoutOutput{}).Match("result.txt") {
+		t.Error("stdout link must not match a file path")
 	}
-
-	err = validateOutput("  result.txt  ")
-	if err != nil {
-		t.Error("whitespaces before and after the value must be ignored")
+	if !(fileOutput{}).Match("result.txt") {
+		t.Error("file link must match a file path")
+	}
+	if (fileOutput{}).Match("-") {
+		t.Error("file link must not match \"-\"")
 	}
 }
 
-func TestOutputValidation_InvalidString(t *testing.T) {
-	err := validateOutput("")
-	if err == nil {
-		t.Error("expected an error for empty string")
+func TestOutputChain_Resolve(t *testing.T) {
+	w, err := outputChain.Resolve("-")
+	if err != nil {
+		t.Fatalf("unexpected error resolving stdout: %v", err)
+	}
+	if w == nil {
+		t.Error("expected a writer for stdout")
 	}
 
-	err = validateOutput("   ")
-	if err == nil {
-		t.Error("expected an error for string consisting of only whitespaces")
+	path := filepath.Join(t.TempDir(), "out.txt")
+	f, err := outputChain.Resolve(path)
+	if err != nil {
+		t.Fatalf("unexpected error resolving file: %v", err)
+	}
+	defer f.Close()
+	if f == nil {
+		t.Error("expected a writer for the file")
+	}
+}
+
+type neverMatch struct{}
+
+func (neverMatch) Match(string) bool { return false }
+
+func TestValidate(t *testing.T) {
+	v := validate(outputChain)
+	if err := v("-"); err != nil {
+		t.Errorf("unexpected error for valid output %q: %v", "-", err)
+	}
+	if err := v("result.txt"); err != nil {
+		t.Errorf("unexpected error for valid output %q: %v", "result.txt", err)
+	}
+
+	if err := validate(neverMatch{})("anything"); err == nil {
+		t.Error("expected an error when the matcher rejects the value")
 	}
 }

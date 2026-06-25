@@ -17,19 +17,10 @@ import (
 )
 
 func Run(ctx context.Context, opts options.Values) error {
-	in, err := options.OpenInput(opts.Input)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
+	defer opts.Input.Close()
+	defer opts.Output.Close()
 
-	out, err := options.OpenOutput(opts.Output)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	img, _, err := image.Decode(in)
+	img, _, err := image.Decode(opts.Input)
 	if err != nil {
 		return err
 	}
@@ -70,12 +61,7 @@ func Run(ctx context.Context, opts options.Values) error {
 		return err
 	}
 
-	cols, rows := terminalSize()
-	ref := ' '
-	if len(charset) > 0 {
-		ref = charset[0]
-	}
-	size, err := opts.OutputSize(options.Terminal{Cols: cols, Rows: rows, Ref: ref})
+	size, err := opts.OutputSize(newTerminal(charset))
 	if err != nil {
 		return err
 	}
@@ -91,7 +77,7 @@ func Run(ctx context.Context, opts options.Values) error {
 		return err
 	}
 
-	if _, err := out.Write(flatten(rendered)); err != nil {
+	if _, err := opts.Output.Write(flatten(rendered)); err != nil {
 		return err
 	}
 
@@ -105,6 +91,15 @@ func flatten(art [][]rune) []byte {
 		buf.WriteByte('\n')
 	}
 	return buf.Bytes()
+}
+
+func newTerminal(charset []rune) options.Terminal {
+	cols, rows := terminalSize()
+	ref := ' '
+	if len(charset) > 0 {
+		ref = charset[0]
+	}
+	return options.Terminal{Cols: cols, Rows: rows, Ref: ref}
 }
 
 func terminalSize() (cols, rows int) {

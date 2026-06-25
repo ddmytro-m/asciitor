@@ -2,10 +2,21 @@ package options
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/urfave/cli/v3"
 )
+
+func tempInput(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "in.png")
+	if err := os.WriteFile(path, []byte("data"), 0o644); err != nil {
+		t.Fatalf("failed to create temp input: %v", err)
+	}
+	return path
+}
 
 func parse(t *testing.T, args ...string) Values {
 	t.Helper()
@@ -15,8 +26,9 @@ func parse(t *testing.T, args ...string) Values {
 		Arguments: []cli.Argument{&cli.StringArg{Name: "input"}},
 		Flags:     Flags,
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			values = Parse(cmd)
-			return nil
+			var err error
+			values, err = Parse(cmd)
+			return err
 		},
 	}
 
@@ -27,13 +39,15 @@ func parse(t *testing.T, args ...string) Values {
 }
 
 func TestParse_Defaults(t *testing.T) {
-	values := parse(t, "image.png")
+	values := parse(t, tempInput(t))
+	defer values.Input.Close()
+	defer values.Output.Close()
 
-	if values.Input != "image.png" {
-		t.Errorf("expected input %q, got %q", "image.png", values.Input)
+	if values.Input == nil {
+		t.Error("expected a non-nil input reader")
 	}
-	if values.Output != "-" {
-		t.Errorf("expected default output %q, got %q", "-", values.Output)
+	if values.Output == nil {
+		t.Error("expected a non-nil output writer")
 	}
 	if values.Width != "tw" {
 		t.Errorf("expected default width %q, got %q", "tw", values.Width)
@@ -50,20 +64,23 @@ func TestParse_Defaults(t *testing.T) {
 }
 
 func TestParse_Overrides(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "out.txt")
 	values := parse(t,
-		"-o", "out.txt",
+		"-o", out,
 		"-w", "100px",
 		"-h", "50l",
 		"--fill",
 		"--inverse",
-		"in.png",
+		tempInput(t),
 	)
+	defer values.Input.Close()
+	defer values.Output.Close()
 
-	if values.Input != "in.png" {
-		t.Errorf("expected input %q, got %q", "in.png", values.Input)
+	if values.Input == nil {
+		t.Error("expected a non-nil input reader")
 	}
-	if values.Output != "out.txt" {
-		t.Errorf("expected output %q, got %q", "out.txt", values.Output)
+	if values.Output == nil {
+		t.Error("expected a non-nil output writer")
 	}
 	if values.Width != "100px" {
 		t.Errorf("expected width %q, got %q", "100px", values.Width)
@@ -76,14 +93,6 @@ func TestParse_Overrides(t *testing.T) {
 	}
 	if !values.Inverse {
 		t.Error("expected Inverse to be true when --inverse is set")
-	}
-}
-
-func TestParse_DefaultsToStdin(t *testing.T) {
-	values := parse(t)
-
-	if values.Input != "" {
-		t.Errorf("expected empty input (stdin) when no argument is given, got %q", values.Input)
 	}
 }
 

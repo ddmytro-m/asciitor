@@ -1,50 +1,90 @@
 package options
 
 import (
-	"errors"
 	"strconv"
 	"strings"
+
+	"github.com/ddmytro-m/asciitor/internal/cli/resolve"
+	"github.com/ddmytro-m/asciitor/sizing"
 )
 
-func validateHeight(s string) error {
-	s = strings.Trim(s, " ")
-	if len(s) == 0 {
-		return errors.New("height not specified")
-	}
+type HeightResolver interface {
+	Matcher[string]
+	Resolver[string, sizing.OutputHeight]
+}
 
-	if s == "th" || s == "original" {
-		return nil
-	}
+type heightOriginal struct{}
 
-	matched := rePx.MatchString(s)
-	if matched {
-		pxStr := s[:len(s)-2] // 1234|px
-		if pxStr[0] == '0' {
-			return errors.New("leading zeros are forbidden")
-		}
-		pxNum, err := strconv.Atoi(pxStr)
-		if err != nil {
-			return err
-		} else if pxNum <= 0 {
-			return errors.New("height must be a positive integer")
-		}
-		return nil
-	}
+func (heightOriginal) Match(s string) bool {
+	return strings.TrimSpace(s) == "original"
+}
 
-	matched = reLines.MatchString(s)
-	if matched {
-		countStr := s[:len(s)-1] // 1234|l
-		if countStr[0] == '0' {
-			return errors.New("leading zeros are forbidden")
-		}
-		countNum, err := strconv.Atoi(countStr)
-		if err != nil {
-			return err
-		} else if countNum <= 0 {
-			return errors.New("lines count must be a positive integer")
-		}
-		return nil
-	}
+func (heightOriginal) Resolve(string) (sizing.OutputHeight, error) {
+	return sizing.HeightAuto{}, nil
+}
 
-	return errors.New("unknown height value")
+type heightTerminal struct{ term Terminal }
+
+func (heightTerminal) Match(s string) bool {
+	return strings.TrimSpace(s) == "th"
+}
+
+func (h heightTerminal) Resolve(string) (sizing.OutputHeight, error) {
+	if h.term.Rows <= 1 {
+		return sizing.HeightAuto{}, nil
+	}
+	return sizing.HeightLines{Amount: h.term.Rows - 1}, nil
+}
+
+type heightPixels struct{}
+
+func (heightPixels) Match(s string) bool {
+	s = strings.TrimSpace(s)
+	if !rePx.MatchString(s) {
+		return false
+	}
+	_, ok := parseAmount(s[:len(s)-2])
+	return ok
+}
+
+func (heightPixels) Resolve(s string) (sizing.OutputHeight, error) {
+	s = strings.TrimSpace(s)
+	n, err := strconv.Atoi(s[:len(s)-2])
+	if err != nil {
+		return nil, err
+	}
+	return sizing.HeightPixels{Pixels: n}, nil
+}
+
+type heightLines struct{}
+
+func (heightLines) Match(s string) bool {
+	s = strings.TrimSpace(s)
+	if !reLines.MatchString(s) {
+		return false
+	}
+	_, ok := parseAmount(s[:len(s)-1])
+	return ok
+}
+
+func (heightLines) Resolve(s string) (sizing.OutputHeight, error) {
+	s = strings.TrimSpace(s)
+	n, err := strconv.Atoi(s[:len(s)-1])
+	if err != nil {
+		return nil, err
+	}
+	return sizing.HeightLines{Amount: n}, nil
+}
+
+func NewHeightChain(t Terminal) *resolve.Chain[string, sizing.OutputHeight] {
+	chain := resolve.NewChain[string, sizing.OutputHeight]()
+	for _, h := range []HeightResolver{
+		heightOriginal{},
+		heightTerminal{t},
+		heightPixels{},
+		heightLines{},
+	} {
+		chain.AddLink(resolve.NewNode(h, h))
+	}
+	return chain
 }

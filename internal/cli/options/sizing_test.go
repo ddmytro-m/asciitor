@@ -29,7 +29,7 @@ func TestOutputWidth(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := outputWidth(tt.in, tt.term)
+			got, err := NewWidthChain(tt.term).Resolve(tt.in)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error for %q, got %#v", tt.in, got)
@@ -68,7 +68,7 @@ func TestOutputHeight(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := outputHeight(tt.in, tt.term)
+			got, err := NewHeightChain(tt.term).Resolve(tt.in)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error for %q, got %#v", tt.in, got)
