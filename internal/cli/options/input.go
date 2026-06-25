@@ -5,6 +5,9 @@ import (
 	"io"
 	"os"
 
+	"net/http"
+	"net/url"
+
 	"github.com/ddmytro-m/asciitor/internal/cli/resolve"
 )
 
@@ -30,6 +33,25 @@ func (stdinInput) Resolve(string) (io.ReadCloser, error) {
 	return io.NopCloser(os.Stdin), nil
 }
 
+type uriInput struct{}
+
+func (uriInput) Match(s string) bool {
+	_, err := url.ParseRequestURI(s)
+	if err == nil {
+		return true
+	}
+
+	return false
+}
+
+func (uriInput) Resolve(s string) (io.ReadCloser, error) {
+	resp, err := http.Get(s)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Body, nil
+}
+
 type fileInput struct{}
 
 func (fileInput) Match(s string) bool {
@@ -42,7 +64,7 @@ func (fileInput) Resolve(s string) (io.ReadCloser, error) {
 
 func NewInputChain() *resolve.Chain[string, io.ReadCloser] {
 	chain := resolve.NewChain[string, io.ReadCloser]()
-	for _, i := range []InputResolver{stdinInput{}, fileInput{}} {
+	for _, i := range []InputResolver{stdinInput{}, uriInput{}, fileInput{}} {
 		chain.AddLink(resolve.NewNode(i, i))
 	}
 	return chain
