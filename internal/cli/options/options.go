@@ -33,6 +33,8 @@ type Values struct {
 	Width  string
 	Height string
 
+	Charset []rune
+
 	KeepProportions bool
 	Inverse         bool
 }
@@ -83,6 +85,13 @@ var Flags = []cli.Flag{
 		Usage:     "max output height: \"100px\", \"12l\" (12 lines), \"original\" (image height), \"th\" (terminal height)",
 		Validator: validate(NewHeightChain(Terminal{})),
 	},
+	&cli.StringFlag{
+		Name:      "charset",
+		Aliases:   []string{"c"},
+		Value:     "ascii",
+		Usage:     "one of the in-built options (ascii, alphanumeric, braille) or path to a text file (each character of which will be used)",
+		Validator: validate(charsetChain),
+	},
 	&cli.BoolWithInverseFlag{
 		Name:  "fill",
 		Value: false,
@@ -112,12 +121,21 @@ func Parse(cmd *cli.Command) (Values, error) {
 		return Values{}, err
 	}
 
+	charset, err := charsetChain.Resolve(cmd.String("charset"))
+	if err != nil {
+		input.Close()
+		output.Close()
+		return Values{}, err
+	}
+
 	return Values{
 		Input:  input,
 		Output: output,
 
 		Width:  cmd.String("width"),
 		Height: cmd.String("height"),
+
+		Charset: charset,
 
 		KeepProportions: !cmd.Bool("fill"),
 		Inverse:         cmd.Bool("inverse"),

@@ -40,12 +40,7 @@ func Run(ctx context.Context, opts options.Values) error {
 		return err
 	}
 
-	charsetPath := filepath.Join(wd, "../../../test/data/charsets/ascii.txt")
-	charsetBytes, err := os.ReadFile(charsetPath)
-	if err != nil {
-		return err
-	}
-	charset := []rune(string(charsetBytes))
+	charset := opts.Charset
 
 	const fontSize = 10
 	const blockSize = 1
