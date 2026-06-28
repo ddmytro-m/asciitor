@@ -8,6 +8,9 @@ all: run\:cli
 run\:cli:
 	go run cmd/asciitor/main.go
 
+build\:cli:
+	go build -o build/asciitor cmd/asciitor/main.go
+
 test:
 	go test -v ./...
 
