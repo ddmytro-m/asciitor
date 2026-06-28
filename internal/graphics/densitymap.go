@@ -10,14 +10,14 @@ type DensityMap struct {
 	cells         []uint64
 }
 
-const maxBlockSize = (64 - 8) / 2
+const DensityMapMaxBlockSize = (64 - 8) / 2
 
 func NewDensityMapFromBitmap(bitmap *Bitmap, blockSize int) (*DensityMap, error) {
 	if bitmap.Buffer == nil {
 		return nil, fmt.Errorf("cannot convert an empty buffer into a density map")
 	}
-	if blockSize > maxBlockSize {
-		return nil, fmt.Errorf("given chunk size is too big (max value is 2^%d).", maxBlockSize)
+	if blockSize > DensityMapMaxBlockSize {
+		return nil, fmt.Errorf("given chunk size is too big (max value is 2^%d).", DensityMapMaxBlockSize)
 	}
 
 	width := (bitmap.Width + blockSize - 1) / blockSize
