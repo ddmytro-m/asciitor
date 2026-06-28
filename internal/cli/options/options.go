@@ -33,9 +33,11 @@ type Values struct {
 	Width  string
 	Height string
 
-	Charset  []rune
+	Charset []rune
+
 	Font     []byte
 	FontFace int
+	FontSize int
 
 	KeepProportions bool
 	Inverse         bool
@@ -106,6 +108,12 @@ var Flags = []cli.Flag{
 		Value: 0,
 		Usage: "font face index",
 	},
+	&cli.IntFlag{
+		Name:    "font-size",
+		Aliases: []string{"s"},
+		Value:   10,
+		Usage:   "font size in pixels",
+	},
 	&cli.BoolWithInverseFlag{
 		Name:  "fill",
 		Value: false,
@@ -150,6 +158,7 @@ func Parse(cmd *cli.Command) (Values, error) {
 	}
 
 	face := cmd.Int("face")
+	fontSize := cmd.Int("font-size")
 
 	return Values{
 		Input:  input,
@@ -161,6 +170,7 @@ func Parse(cmd *cli.Command) (Values, error) {
 		Charset:  charset,
 		Font:     font,
 		FontFace: face,
+		FontSize: fontSize,
 
 		KeepProportions: !cmd.Bool("fill"),
 		Inverse:         cmd.Bool("inverse"),
