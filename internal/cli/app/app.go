@@ -28,7 +28,7 @@ func Run(ctx context.Context, opts options.Values) error {
 		return err
 	}
 
-	face, err := font.GetFace(0)
+	face, err := font.GetFace(opts.FontFace)
 	if err != nil {
 		return err
 	}

@@ -1,6 +1,7 @@
 package font
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -49,6 +50,12 @@ func (f *Font) GetParams() freetype.FontParams {
 }
 
 func (f *Font) GetFace(index int) (*Face, error) {
+	if index < 0 {
+		// -1 may be used to get general font information
+		// but this method is exported and must return valid face
+		return nil, errors.New("face index invalid")
+	}
+
 	faceProperties, err := freetype.GetFaceProperties(freetype.FaceParams{FontParams: f.GetParams(), FaceIndex: index})
 	if err != nil {
 		return nil, err
