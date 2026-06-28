@@ -36,7 +36,7 @@ func Run(ctx context.Context, opts options.Values) error {
 	charset := opts.Charset
 	fontSize := opts.FontSize
 
-	const blockSize = 1
+	blockSize := opts.BlockSize
 
 	o := asciitor.AsciitorOptions{
 		Face:      face,

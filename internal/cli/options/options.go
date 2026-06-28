@@ -39,6 +39,8 @@ type Values struct {
 	FontFace int
 	FontSize int
 
+	BlockSize int
+
 	KeepProportions bool
 	Inverse         bool
 }
@@ -114,6 +116,12 @@ var Flags = []cli.Flag{
 		Value:   10,
 		Usage:   "font size in pixels",
 	},
+	&cli.IntFlag{
+		Name:    "block-size",
+		Aliases: []string{"b"},
+		Value:   1,
+		Usage:   "block is a NxN square used to compare characters with an image. bigger sizes may better convey colors and increase speed, but some details may be lost",
+	},
 	&cli.BoolWithInverseFlag{
 		Name:  "fill",
 		Value: false,
@@ -160,6 +168,8 @@ func Parse(cmd *cli.Command) (Values, error) {
 	face := cmd.Int("face")
 	fontSize := cmd.Int("font-size")
 
+	blockSize := cmd.Int("block-size")
+
 	return Values{
 		Input:  input,
 		Output: output,
@@ -167,10 +177,13 @@ func Parse(cmd *cli.Command) (Values, error) {
 		Width:  cmd.String("width"),
 		Height: cmd.String("height"),
 
-		Charset:  charset,
+		Charset: charset,
+
 		Font:     font,
 		FontFace: face,
 		FontSize: fontSize,
+
+		BlockSize: blockSize,
 
 		KeepProportions: !cmd.Bool("fill"),
 		Inverse:         cmd.Bool("inverse"),
