@@ -7,8 +7,6 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"os"
-	"path/filepath"
-	"runtime"
 
 	"github.com/ddmytro-m/asciitor"
 	"github.com/ddmytro-m/asciitor/font"
@@ -25,12 +23,7 @@ func Run(ctx context.Context, opts options.Values) error {
 		return err
 	}
 
-	// @TODO: replace this hard-coded mess with import strategies
-	_, file, _, _ := runtime.Caller(0)
-	wd := filepath.Dir(file)
-
-	fontPath := filepath.Join(wd, "../../../test/data/fonts/DejaVuSansMono.ttf")
-	font, err := font.NewFontFromFile(fontPath)
+	font, err := font.NewFont(opts.Font)
 	if err != nil {
 		return err
 	}

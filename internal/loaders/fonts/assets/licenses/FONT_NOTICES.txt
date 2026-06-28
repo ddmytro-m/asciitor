@@ -1,0 +1,13 @@
+Inter
+Copyright 2020 The Inter Project Authors (https://github.com/rsms/inter)
+Licensed under the SIL Open Font License, Version 1.1 (see OFL.txt).
+
+Noto Sans Symbols 2
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/symbols)
+Licensed under the SIL Open Font License, Version 1.1 (see OFL.txt).
+
+DejaVu Sans Mono
+Copyright (c) 2003 by Bitstream, Inc. All Rights Reserved.
+Copyright (c) 2006 by Tavmjong Bah. All Rights Reserved.
+DejaVu changes are in public domain.
+Licensed under the Bitstream Vera / Arev License (see DEJAVU_LICENSE.txt).
